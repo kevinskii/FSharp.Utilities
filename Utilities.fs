@@ -73,3 +73,34 @@ let groupClusteredBy (projection:'T->'Key) (source:#seq<'T>) =
         // Return the remaining cluster of values
         yield (prevKey.Value, cluster.ToArray() |> Seq.ofArray)
     }
+
+
+/// <summary>
+/// Performs a lazy groupBy of items that are known ahead of time to be clusted by key, and then removes 
+/// the key from the grouped values.
+/// The usage is identical to that of groupValuesBy().
+/// WARNING: Erroneous grouping will occur if the data set contains non-adjacent keys of the same value.
+/// </summary>
+/// <seealso cref="groupValuesBy"/>
+/// <seealso cref="groupClusteredBy"/>
+let groupClusteredValuesBy (projection:'T->('Key*'Values)) (source:#seq<'T>) =
+    // Note: This logic could be simplified by just calling groupClusteredBy() and then removing the key from the grouped values,
+    // but this would cause the projection to be computed twice for each element in the sequence.
+    let prevKey = ref (let (key,_) = projection (Seq.head source) in key) // Get a mutable key of the first item in the sequence
+    let enumerator = source.GetEnumerator()
+    let cluster = ResizeArray<'Values>()
+
+    // Enumerate through the source sequence and do a lazy groupBy of adjacent keys which have the same value
+    seq {
+        while enumerator.MoveNext() do
+            // If this item's key doesn't match the previous ones', then return the group of items which had the same key
+            let currItem = enumerator.Current
+            let (currKey,currValues) = projection currItem         
+            if currKey <> prevKey.Value then
+                yield (prevKey.Value, cluster.ToArray() |> Seq.ofArray)
+                prevKey := currKey
+                cluster.Clear()
+            cluster.Add currValues
+        // Return the remaining cluster of values
+        yield (prevKey.Value, cluster.ToArray() |> Seq.ofArray)
+    }
